@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Home Loan Calculator</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      padding: 20px;
+    }
+    label, input, select {
+      display: block;
+      margin: 10px 0;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 20px;
+    }
+    th, td {
+      border: 1px solid #ccc;
+      padding: 8px;
+    }
+    canvas {
+      max-width: 100%;
+      margin-top: 30px;
+    }
+  </style>
+</head>
+<body>
+
+<h2>Home Loan Calculator</h2>
+
+<label>Loan Amount: <input type="number" id="loanAmount" /></label>
+<label>Annual Interest Rate (%): <input type="number" id="interestRate" /></label>
+<label>Installment Amount: <input type="number" id="installment" /></label>
+<label>Repayment Frequency:
+  <select id="frequency">
+    <option value="weekly">Weekly</option>
+    <option value="fortnightly">Fortnightly</option>
+    <option value="monthly">Monthly</option>
+  </select>
+</label>
+<label>Start Date: <input type="date" id="startDate" /></label>
+<button onclick="calculate()">Calculate</button>
+<button onclick="exportCSV()">Export to CSV</button>
+
+<div id="output"></div>
+<canvas id="loanChart"></canvas>
+
+<script>
+function calculate() {
+  const loan = parseFloat(document.getElementById('loanAmount').value);
+  const rate = parseFloat(document.getElementById('interestRate').value) / 100;
+  const installment = parseFloat(document.getElementById('installment').value);
+  const freq = document.getElementById('frequency').value;
+  const startDate = new Date(document.getElementById('startDate').value);
+
+  if (!loan || !rate || !installment || isNaN(startDate)) {
+    alert("Please fill in all fields correctly.");
+    return;
+  }
+
+  let frequencyFactor = { weekly: 52, fortnightly: 26, monthly: 12 }[freq];
+  let intervalDays = { weekly: 7, fortnightly: 14, monthly: 30 }[freq];
+
+  let schedule = [];
+  let balance = loan;
+  let date = new Date(startDate);
+  let iteration = 0;
+  let labels = [], data = [];
+
+  const ratePerPeriod = rate / frequencyFactor;
+
+  while (balance > 0 && iteration < 1000) {
+    let interest = balance * ratePerPeriod;
+    let principal = installment - interest;
+
+    if (principal > balance) {
+      principal = balance;
+      interest = balance * ratePerPeriod;
+    }
+
+    balance -= principal;
+
+    let paymentDate = new Date(date);
+    schedule.push({
+      payment: iteration + 1,
+      date: paymentDate.toISOString().split('T')[0],
+      interest: interest.toFixed(2),
+      principal: principal.toFixed(2),
+      balance: Math.max(balance, 0).toFixed(2)
+    });
+
+    labels.push(paymentDate.toISOString().split('T')[0]);
+    data.push(balance.toFixed(2));
+
+    if (freq === 'monthly') {
+      date.setMonth(date.getMonth() + 1);
+    } else {
+      date.setDate(date.getDate() + intervalDays);
+    }
+
+    iteration++;
+  }
+
+  // Display schedule
+  let html = `<table><tr><th>#</th><th>Date</th><th>Interest</th><th>Principal</th><th>Balance</th></tr>`;
+  schedule.forEach(p => {
+    html += `<tr>
+      <td>${p.payment}</td>
+      <td>${p.date}</td>
+      <td>$${p.interest}</td>
+      <td>$${p.principal}</td>
+      <td>$${p.balance}</td>
+    </tr>`;
+  });
+  html += `</table>`;
+  document.getElementById('output').innerHTML = html;
+
+  // Chart
+  const ctx = document.getElementById('loanChart').getContext('2d');
+  if (window.myChart) window.myChart.destroy();
+  window.myChart = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [{
+        label: 'Loan Balance Over Time',
+        data,
+        borderColor: 'blue',
+        fill: false,
+        tension: 0.1
+      }]
+    }
+  });
+
+  // Store for CSV
+  window.scheduleData = schedule;
+}
+
+function exportCSV() {
+  if (!window.scheduleData) return;
+  const rows = [
+    ['Payment #', 'Date', 'Interest', 'Principal', 'Balance'],
+    ...window.scheduleData.map(r => [r.payment, r.date, r.interest, r.principal, r.balance])
+  ];
+  const csv = rows.map(r => r.join(',')).join('\n');
+  const blob = new Blob([csv], { type: 'text/csv' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = "loan_schedule.csv";
+  a.click();
+  URL.revokeObjectURL(url);
+}
+</script>
+
+</body>
+</html>
